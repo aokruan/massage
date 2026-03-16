@@ -1,4 +1,4 @@
-package ru.aokruan.hmlkbi
+package ru.aokruan.ui.state
 
 import ru.aokruan.service.model.ServiceItem
 

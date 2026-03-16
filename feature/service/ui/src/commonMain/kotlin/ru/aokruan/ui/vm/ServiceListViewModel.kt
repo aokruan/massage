@@ -1,4 +1,4 @@
-package ru.aokruan.hmlkbi
+package ru.aokruan.ui.vm
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.aokruan.network.ApiOperation
 import ru.aokruan.service.domain.GetMassagesPageUseCase
+import ru.aokruan.ui.state.ServiceListState
+import kotlin.collections.plus
 
 class ServiceListViewModel(
     private val getMassagesPage: GetMassagesPageUseCase,

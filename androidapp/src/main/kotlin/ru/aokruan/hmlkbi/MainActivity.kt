@@ -10,7 +10,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            App(baseUrl = BuildConfig.BASE_URL, enableLogging = BuildConfig.DEBUG)
+            App(
+                baseUrl = BuildConfig.BASE_URL,
+                enableLogging = BuildConfig.DEBUG
+            )
         }
     }
 }

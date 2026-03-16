@@ -33,7 +33,10 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
 
             implementation(project(":feature:service:domain"))
+            implementation(project(":feature:service:ui"))
             implementation(project(":core:di"))
+
+            implementation(libs.navigation.compose)
         }
 
         androidMain.dependencies {
