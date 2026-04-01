@@ -20,7 +20,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,9 +51,27 @@ fun ServiceDetailScreen(
     id: String,
     getMassageById: GetMassageByIdUseCase,
     onBack: () -> Unit,
+    onNotificationRequested: (id: String, title: String, body: String) -> Unit,
 ) {
     val vm = remember(id) { ServiceDetailViewModel(id, getMassageById) }
     val state by vm.state.collectAsState()
+
+    var notificationSent by rememberSaveable(id) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(state.item?.id) {
+        val loadedItem = state.item ?: return@LaunchedEffect
+
+        if (!notificationSent) {
+            onNotificationRequested(
+                loadedItem.id,
+                loadedItem.title,
+                loadedItem.description,
+            )
+            notificationSent = true
+        }
+    }
 
     LaunchedEffect(Unit) { vm.load() }
 

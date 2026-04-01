@@ -15,6 +15,7 @@ fun NavGraphBuilder.serviceGraph(
     navController: NavController,
     getMassagesPage: GetMassagesPageUseCase,
     getMassageById: GetMassageByIdUseCase,
+    onNotificationRequested: (id: String, title: String, body: String) -> Unit,
 ) {
     composable<ServiceListRoute> {
         val vm = remember {
@@ -38,7 +39,8 @@ fun NavGraphBuilder.serviceGraph(
         ServiceDetailScreen(
             id = route.id,
             getMassageById = getMassageById,
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onNotificationRequested = onNotificationRequested,
         )
     }
 }

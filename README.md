@@ -1,7 +1,6 @@
 This is a Kotlin Multiplatform project targeting Android, iOS.
 
-<img width="200" src="docs/img/img001.png">
-<img width="200" src="docs/img/img002.png">
+<img width="200" src="docs/img/img001.png"><img width="200" src="docs/img/img002.png">
 
 ### Build and Run Android Application
 
