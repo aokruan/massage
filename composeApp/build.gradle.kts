@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -35,6 +36,7 @@ kotlin {
             implementation(project(":feature:service:domain"))
             implementation(project(":feature:service:ui"))
             implementation(project(":core:di"))
+            implementation(project(":core:designsystem"))
 
             implementation(libs.navigation.compose)
         }
