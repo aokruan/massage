@@ -38,12 +38,22 @@ kotlin {
             implementation(project(":core:di"))
             implementation(project(":core:designsystem"))
 
+            implementation(project(":core:bluetooth"))
+            implementation(project(":core:qr"))
+            implementation(project(":core:notification"))
+
+            implementation(project(":feature:device:domain"))
+            implementation(project(":feature:device:data"))
+            implementation(project(":feature:device:ui"))
+
             implementation(libs.navigation.compose)
         }
 
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.compose.uiToolingPreview)
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.zxing.android.embedded)
         }
     }
 }

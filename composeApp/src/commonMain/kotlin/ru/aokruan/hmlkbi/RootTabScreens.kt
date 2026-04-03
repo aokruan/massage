@@ -18,20 +18,14 @@ import ru.aokruan.designsystem.AppColors
 import ru.aokruan.designsystem.components.DecorativeBlobs
 import ru.aokruan.designsystem.components.GlassSectionCard
 import ru.aokruan.designsystem.components.PremiumTopBar
+import ru.aokruan.hmlkbi.feature.device.ui.DeviceMonitorScreen
+import ru.aokruan.hmlkbi.feature.device.ui.DeviceMonitorViewModel
 
 @Composable
 fun BookingScreen() {
     RootPlaceholderScreen(
         title = "Запись",
         message = "Здесь будет сценарий записи на услугу."
-    )
-}
-
-@Composable
-fun ToolsScreen() {
-    RootPlaceholderScreen(
-        title = "Инструменты",
-        message = "Здесь будет сценарий инструментов."
     )
 }
 

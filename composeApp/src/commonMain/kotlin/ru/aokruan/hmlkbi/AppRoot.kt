@@ -128,7 +128,7 @@ fun AppRoot(
                     }
 
                     composable<ToolsRoute> {
-                        ToolsScreen()
+                        DeviceToolsRoute(notifier = notifier)
                     }
 
                     composable<ProfileRoute> {

@@ -6,7 +6,7 @@ import ru.aokruan.hmlkbi.core.notification.IosUserNotifier
 
 fun MainViewController() = ComposeUIViewController {
     val baseUrl = (NSBundle.mainBundle.objectForInfoDictionaryKey("BASE_URL") as? String)
-        ?: "http://localhost:8080/"
+        ?: "http://192.168.50.176:8080/"
 
     val notifier = IosUserNotifier()
 

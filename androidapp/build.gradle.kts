@@ -26,7 +26,7 @@ android {
 
     flavorDimensions += "env"
     productFlavors {
-        create("dev") { dimension = "env"; buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8080/\"") }
+        create("dev") { dimension = "env"; buildConfigField("String", "BASE_URL", "\"http://192.168.50.176:8080/\"") }
         create("stage") { dimension = "env"; buildConfigField("String", "BASE_URL", "\"https://stage.api.example.com/\"") }
         create("prod") { dimension = "env"; buildConfigField("String", "BASE_URL", "\"https://api.example.com/\"") }
     }
@@ -44,4 +44,5 @@ tasks.withType<KotlinCompile>().configureEach {
 dependencies {
     implementation(project(":composeApp")) // shared UI
     implementation(libs.androidx.activity.compose)
+    //implementation(libs.zxing.android.embedded)
 }

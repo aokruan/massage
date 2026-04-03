@@ -8,8 +8,18 @@
 		<true/>
 	</dict>
 	<key>BASE_URL</key>
-	<string>http://localhost:8080/</string>
+	<string>http://192.168.50.176:8080/</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Приложение подключается к медицинскому BLE-устройству и получает его показания.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна для сканирования QR-кода BLE-устройства.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Приложение подключается к медицинскому BLE-устройству и получает его показания.</string>
 </dict>
 </plist>
