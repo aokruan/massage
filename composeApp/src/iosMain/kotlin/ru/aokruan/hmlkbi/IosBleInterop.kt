@@ -11,9 +11,12 @@ internal object IosBleRuntime {
         ignoreUnknownKeys = true
         isLenient = true
     }
+    private val alarmHistoryParser = AlarmHistoryParser()
 
     val currentStatus = MutableStateFlow<MedicalCurrentStatus?>(null)
     val alarmEvents = MutableSharedFlow<AlarmEvent>(extraBufferCapacity = 32)
+    val alarmHistory = MutableStateFlow<List<AlarmEvent>>(emptyList())
+    val sessionState = MutableStateFlow<BleSessionState>(BleSessionState.Idle)
 
     var startMonitoring: ((String, String) -> Unit)? = null
     var stopMonitoring: (() -> Unit)? = null
@@ -24,6 +27,7 @@ internal object IosBleRuntime {
             json.decodeFromString(MedicalCurrentStatus.serializer(), payload)
         }.onSuccess {
             currentStatus.value = it
+            sessionState.value = BleSessionState.Ready
         }
     }
 
@@ -32,7 +36,35 @@ internal object IosBleRuntime {
             json.decodeFromString(AlarmEvent.serializer(), payload)
         }.onSuccess {
             alarmEvents.tryEmit(it)
+            alarmHistory.value = alarmHistory.value.mergeAlarm(it)
         }
+    }
+
+    fun emitAlarmHistoryJson(payload: String) {
+        alarmHistory.value = alarmHistoryParser.parse(payload)
+    }
+
+    fun emitSessionState(name: String, message: String?) {
+        sessionState.value = when (name.lowercase()) {
+            "idle" -> BleSessionState.Idle
+            "scanning" -> BleSessionState.Scanning
+            "connecting" -> BleSessionState.Connecting
+            "discovering_services" -> BleSessionState.DiscoveringServices
+            "negotiating_mtu" -> BleSessionState.NegotiatingMtu
+            "subscribing_current_status" -> BleSessionState.SubscribingCurrentStatus
+            "subscribing_alarm_event" -> BleSessionState.SubscribingAlarmEvent
+            "reading_alarm_history" -> BleSessionState.ReadingAlarmHistory
+            "ready" -> BleSessionState.Ready
+            "reconnecting" -> BleSessionState.Reconnecting
+            "failed" -> BleSessionState.Failed(message ?: "Unknown iOS BLE error")
+            else -> sessionState.value
+        }
+    }
+
+    fun clearMonitoringSnapshot() {
+        currentStatus.value = null
+        alarmHistory.value = emptyList()
+        sessionState.value = BleSessionState.Idle
     }
 }
 
@@ -50,10 +82,12 @@ class IosBleInterop {
     }
 
     fun startMonitoring(serviceUuid: String, deviceName: String) {
+        IosBleRuntime.sessionState.value = BleSessionState.Connecting
         IosBleRuntime.startMonitoring?.invoke(serviceUuid, deviceName)
     }
 
     fun stopMonitoring() {
+        IosBleRuntime.clearMonitoringSnapshot()
         IosBleRuntime.stopMonitoring?.invoke()
     }
 
@@ -68,4 +102,21 @@ class IosBleInterop {
     fun emitAlarmEventJson(payload: String) {
         IosBleRuntime.emitAlarmEventJson(payload)
     }
+
+    fun emitAlarmHistoryJson(payload: String) {
+        IosBleRuntime.emitAlarmHistoryJson(payload)
+    }
+
+    fun emitSessionState(name: String, message: String?) {
+        IosBleRuntime.emitSessionState(name, message)
+    }
+
+    fun clearMonitoringSnapshot() {
+        IosBleRuntime.clearMonitoringSnapshot()
+    }
+}
+
+private fun List<AlarmEvent>.mergeAlarm(alarm: AlarmEvent): List<AlarmEvent> {
+    val updated = filterNot { it.id == alarm.id }
+    return listOf(alarm) + updated
 }

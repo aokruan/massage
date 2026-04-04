@@ -16,6 +16,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
+import android.os.SystemClock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,13 +84,17 @@ class BleSessionManager(
 
     private var connectParams: BleConnectParams? = null
     private var reconnectJob: Job? = null
+    private var staleConnectionWatchdogJob: Job? = null
     private var manualDisconnect = false
+    private var lastCurrentStatusAtMs: Long = 0L
 
     suspend fun connect(params: BleConnectParams): Result<Unit> {
         manualDisconnect = false
         connectParams = params
         bleStore.saveLastParams(params)
         reconnectJob?.cancel()
+        stopStaleConnectionWatchdog()
+        lastCurrentStatusAtMs = 0L
         return connectInternal(params)
     }
 
@@ -102,11 +107,14 @@ class BleSessionManager(
     suspend fun disconnect() {
         manualDisconnect = true
         reconnectJob?.cancel()
+        stopStaleConnectionWatchdog()
+        lastCurrentStatusAtMs = 0L
         operationQueue.clear()
         bluetoothGatt?.disconnect()
         bluetoothGatt?.close()
         bluetoothGatt = null
         clearCharacteristics()
+        _currentStatus.value = null
         _sessionState.value = BleSessionState.Idle
     }
 
@@ -171,46 +179,9 @@ class BleSessionManager(
         val adapter = bluetoothAdapter ?: return Result.failure(
             IllegalStateException("Bluetooth adapter is not available")
         )
-        val scanner = adapter.bluetoothLeScanner ?: return Result.failure(
-            IllegalStateException("BLE scanner is not available")
-        )
-
-        _sessionState.value = BleSessionState.Scanning
-
-        val device = withTimeoutOrNull(15_000L) {
-            suspendCancellableCoroutine<BluetoothDevice?> { continuation ->
-                val filter = ScanFilter.Builder()
-                    .setServiceUuid(ParcelUuid(UUID.fromString(params.serviceUuid)))
-                    .build()
-
-                val settings = ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                    .build()
-
-                val callback = object : ScanCallback() {
-                    override fun onScanResult(callbackType: Int, result: ScanResult) {
-                        val candidateName = result.device.name ?: result.scanRecord?.deviceName
-                        if (candidateName == params.deviceName) {
-                            scanner.stopScan(this)
-                            if (continuation.isActive) continuation.resume(result.device)
-                        }
-                    }
-
-                    override fun onScanFailed(errorCode: Int) {
-                        if (continuation.isActive) continuation.resume(null)
-                    }
-                }
-
-                scanner.startScan(listOf(filter), settings, callback)
-
-                continuation.invokeOnCancellation {
-                    scanner.stopScan(callback)
-                }
-                android.util.Log.d("BleSessionManager", "device matched name=${params.deviceName}")
-            }
-        } ?: run {
-            _sessionState.value = BleSessionState.Failed("Device not found")
-            return Result.failure(IllegalStateException("Device not found"))
+        val device = resolveDevice(adapter, params).getOrElse {
+            _sessionState.value = BleSessionState.Failed(it.message ?: "Device not found")
+            return Result.failure(it)
         }
 
         _sessionState.value = BleSessionState.Connecting
@@ -233,16 +204,15 @@ class BleSessionManager(
 
                     if (newState == BluetoothProfile.STATE_CONNECTED) {
                         bluetoothGatt = gatt
+                        bleStore.saveLastDeviceAddress(gatt.device.address)
                         _sessionState.value = BleSessionState.DiscoveringServices
                         gatt.discoverServices()
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                        gatt.close()
-                        if (!manualDisconnect) {
-                            _sessionState.value = BleSessionState.Reconnecting
-                            scheduleReconnectIfNeeded()
-                        } else {
-                            _sessionState.value = BleSessionState.Idle
-                        }
+                        handleDisconnectedGatt(
+                            gatt = gatt,
+                            shouldReconnect = !manualDisconnect,
+                            message = "GATT disconnected",
+                        )
                     }
                 }
 
@@ -374,6 +344,8 @@ class BleSessionManager(
                             return@launch
                         }
 
+                        markCurrentStatusHeartbeat()
+                        startStaleConnectionWatchdog()
                         _sessionState.value = BleSessionState.Ready
                         if (continuation.isActive) {
                             continuation.resume(Result.success(Unit))
@@ -438,6 +410,7 @@ class BleSessionManager(
                             runCatching {
                                 json.decodeFromString(MedicalCurrentStatus.serializer(), payload)
                             }.onSuccess {
+                                markCurrentStatusHeartbeat()
                                 _currentStatus.value = it
                             }
                         }
@@ -453,30 +426,127 @@ class BleSessionManager(
                 }
             }
 
-            bluetoothGatt = device.connectGatt(context, false, callback)
+            val activeGatt = device.connectGatt(context, false, callback)
 
             continuation.invokeOnCancellation {
-                bluetoothGatt?.disconnect()
-                bluetoothGatt?.close()
+                cleanupAfterConnectionLoss(activeGatt)
+                activeGatt.disconnect()
+                activeGatt.close()
             }
+        }
+    }
+
+    private suspend fun resolveDevice(
+        adapter: BluetoothAdapter,
+        params: BleConnectParams,
+    ): Result<BluetoothDevice> {
+        val savedAddress = bleStore.getLastDeviceAddress()
+        if (!savedAddress.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(savedAddress)) {
+            runCatching {
+                adapter.getRemoteDevice(savedAddress)
+            }.onSuccess { device ->
+                android.util.Log.d(
+                    "BleSessionManager",
+                    "resolveDevice using saved address=$savedAddress",
+                )
+                return Result.success(device)
+            }
+        }
+
+        val scanner = adapter.bluetoothLeScanner ?: return Result.failure(
+            IllegalStateException("BLE scanner is not available")
+        )
+
+        _sessionState.value = BleSessionState.Scanning
+
+        val device = withTimeoutOrNull(15_000L) {
+            suspendCancellableCoroutine<BluetoothDevice?> { continuation ->
+                val filter = ScanFilter.Builder()
+                    .setServiceUuid(ParcelUuid(UUID.fromString(params.serviceUuid)))
+                    .build()
+
+                val settings = ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .build()
+
+                val callback = object : ScanCallback() {
+                    override fun onScanResult(callbackType: Int, result: ScanResult) {
+                        val candidateName = result.device.name ?: result.scanRecord?.deviceName
+                        if (candidateName == params.deviceName) {
+                            bleStore.saveLastDeviceAddress(result.device.address)
+                            scanner.stopScan(this)
+                            if (continuation.isActive) continuation.resume(result.device)
+                        }
+                    }
+
+                    override fun onScanFailed(errorCode: Int) {
+                        if (continuation.isActive) continuation.resume(null)
+                    }
+                }
+
+                scanner.startScan(listOf(filter), settings, callback)
+
+                continuation.invokeOnCancellation {
+                    scanner.stopScan(callback)
+                }
+            }
+        }
+
+        return if (device == null) {
+            Result.failure(IllegalStateException("Device not found"))
+        } else {
+            Result.success(device)
         }
     }
 
     private fun scheduleReconnectIfNeeded() {
         if (manualDisconnect) return
+        if (reconnectJob?.isActive == true) return
         val params = connectParams ?: bleStore.getLastParams() ?: return
 
-        reconnectJob?.cancel()
         reconnectJob = scope.launch {
             var attempt = 0
-            while (!manualDisconnect) {
-                _sessionState.value = BleSessionState.Reconnecting
-                delay(reconnectPolicy.delayForAttempt(attempt))
-                val result = connectInternal(params)
-                if (result.isSuccess) return@launch
-                attempt++
+            try {
+                while (!manualDisconnect) {
+                    _sessionState.value = BleSessionState.Reconnecting
+                    delay(reconnectPolicy.delayForAttempt(attempt))
+                    val result = connectInternal(params)
+                    if (result.isSuccess) return@launch
+                    attempt++
+                }
+            } finally {
+                reconnectJob = null
             }
         }
+    }
+
+    private fun startStaleConnectionWatchdog() {
+        staleConnectionWatchdogJob?.cancel()
+        staleConnectionWatchdogJob = scope.launch {
+            while (!manualDisconnect) {
+                delay(STALE_CONNECTION_CHECK_INTERVAL_MS)
+                if (_sessionState.value != BleSessionState.Ready) continue
+
+                val staleForMs = SystemClock.elapsedRealtime() - lastCurrentStatusAtMs
+                if (staleForMs < STALE_CONNECTION_TIMEOUT_MS) continue
+
+                android.util.Log.w(
+                    "BleSessionManager",
+                    "current_status watchdog expired after ${staleForMs}ms, forcing reconnect",
+                )
+                forceReconnect("No current_status updates for ${staleForMs}ms")
+                return@launch
+            }
+        }
+    }
+
+    private fun stopStaleConnectionWatchdog() {
+        staleConnectionWatchdogJob?.cancel()
+        staleConnectionWatchdogJob = null
+    }
+
+    private fun markCurrentStatusHeartbeat() {
+        lastCurrentStatusAtMs = SystemClock.elapsedRealtime()
     }
 
     private fun clearCharacteristics() {
@@ -486,16 +556,72 @@ class BleSessionManager(
         controlCharacteristic = null
     }
 
+    private fun cleanupAfterConnectionLoss(gatt: BluetoothGatt): Boolean {
+        val activeGatt = bluetoothGatt
+        if (activeGatt != null && activeGatt !== gatt) {
+            return false
+        }
+
+        if (activeGatt === gatt) {
+            bluetoothGatt = null
+        }
+        operationQueue.clear()
+        clearCharacteristics()
+        stopStaleConnectionWatchdog()
+        lastCurrentStatusAtMs = 0L
+        _currentStatus.value = null
+        return true
+    }
+
+    private fun handleDisconnectedGatt(
+        gatt: BluetoothGatt,
+        shouldReconnect: Boolean,
+        message: String? = null,
+    ) {
+        val cleanedUp = cleanupAfterConnectionLoss(gatt)
+        gatt.close()
+
+        if (!cleanedUp) {
+            return
+        }
+
+        if (shouldReconnect && !manualDisconnect) {
+            _sessionState.value = BleSessionState.Reconnecting
+            scheduleReconnectIfNeeded()
+        } else {
+            _sessionState.value = BleSessionState.Idle
+        }
+
+        if (message != null) {
+            android.util.Log.w("BleSessionManager", message)
+        }
+    }
+
+    private fun forceReconnect(message: String) {
+        val gatt = bluetoothGatt ?: return
+        cleanupAfterConnectionLoss(gatt)
+        _sessionState.value = BleSessionState.Reconnecting
+        runCatching { gatt.disconnect() }
+        gatt.close()
+        android.util.Log.w("BleSessionManager", message)
+        scheduleReconnectIfNeeded()
+    }
+
     private fun failAndClose(
         gatt: BluetoothGatt,
         continuation: kotlin.coroutines.Continuation<Result<Unit>>,
         message: String,
     ) {
         _sessionState.value = BleSessionState.Failed(message)
-        operationQueue.clear()
+        cleanupAfterConnectionLoss(gatt)
         gatt.close()
         if (continuation is kotlinx.coroutines.CancellableContinuation && continuation.isActive) {
             continuation.resume(Result.failure(IllegalStateException(message)))
         }
+    }
+
+    companion object {
+        private const val STALE_CONNECTION_TIMEOUT_MS = 20_000L
+        private const val STALE_CONNECTION_CHECK_INTERVAL_MS = 5_000L
     }
 }

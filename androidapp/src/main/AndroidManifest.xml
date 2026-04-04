@@ -50,7 +50,8 @@
         <service
             android:name="ru.aokruan.hmlkbi.device.service.BleForegroundService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false" />
     </application>
 
 </manifest>

@@ -30,7 +30,6 @@ class BleServiceController(
 
     private var service: BleForegroundService? = null
     private var isBound: Boolean = false
-    private var pendingStartParams: BleConnectParams? = null
 
     private var sessionStateJob: Job? = null
     private var currentStatusJob: Job? = null
@@ -60,13 +59,6 @@ class BleServiceController(
             isBound = true
 
             bindServiceFlows()
-
-            val pending = pendingStartParams
-            if (pending != null) {
-                Log.e("BleServiceController", "consuming pendingStartParams=$pending")
-                service?.startMonitoring(pending)
-                pendingStartParams = null
-            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -102,26 +94,23 @@ class BleServiceController(
             "startMonitoring params=$params isBound=$isBound serviceNull=${service == null}"
         )
 
-        pendingStartParams = params
-
-        val intent = Intent(context, BleForegroundService::class.java)
+        val intent = BleForegroundService.createStartIntent(context, params)
         context.startForegroundService(intent)
         Log.e("BleServiceController", "startForegroundService called")
 
         if (!isBound) {
-            val ok = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+            val ok = context.bindService(
+                Intent(context, BleForegroundService::class.java),
+                connection,
+                Context.BIND_AUTO_CREATE,
+            )
             Log.e("BleServiceController", "bindService during start result=$ok")
-            return
         }
-
-        service?.startMonitoring(params)
-        pendingStartParams = null
     }
 
     fun stopMonitoring() {
         Log.e("BleServiceController", "stopMonitoring()")
-        pendingStartParams = null
-        service?.stopMonitoring()
+        context.startService(BleForegroundService.createStopIntent(context))
     }
 
     suspend fun acknowledgeAlarm(alarmId: Long): Result<Unit> {

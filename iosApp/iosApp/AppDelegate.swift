@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        BleBridge.shared.bootstrap(launchOptions: launchOptions)
+
         let center = UNUserNotificationCenter.current()
         center.delegate = notificationDelegate
 

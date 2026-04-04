@@ -3,6 +3,7 @@ package ru.aokruan.hmlkbi.device.service
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterNotNull
 import ru.aokruan.hmlkbi.BleConnectParams
+import ru.aokruan.hmlkbi.BleSessionState
 import ru.aokruan.hmlkbi.IosBleInterop
 import ru.aokruan.hmlkbi.IosBleRuntime
 import ru.aokruan.hmlkbi.feature.device.data.MedicalDeviceSessionBridge
@@ -29,6 +30,14 @@ class IosMedicalDeviceSessionBridge : MedicalDeviceSessionBridge {
 
     override fun observeAlarmEvents(): Flow<AlarmEvent> {
         return IosBleRuntime.alarmEvents
+    }
+
+    override fun observeAlarmHistory(): Flow<List<AlarmEvent>> {
+        return IosBleRuntime.alarmHistory
+    }
+
+    override fun observeSessionState(): Flow<BleSessionState> {
+        return IosBleRuntime.sessionState
     }
 
     override suspend fun acknowledgeAlarm(alarmId: Long): Result<Unit> {

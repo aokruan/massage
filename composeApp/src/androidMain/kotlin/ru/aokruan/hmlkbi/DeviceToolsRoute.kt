@@ -19,8 +19,11 @@ import ru.aokruan.hmlkbi.device.service.AndroidMedicalDeviceSessionBridge
 import ru.aokruan.hmlkbi.feature.device.data.MedicalDeviceRepositoryImpl
 import ru.aokruan.hmlkbi.feature.device.domain.AcknowledgeAlarmUseCase
 import ru.aokruan.hmlkbi.feature.device.domain.ConnectMedicalDeviceByQrUseCase
+import ru.aokruan.hmlkbi.feature.device.domain.DisconnectMedicalDeviceUseCase
 import ru.aokruan.hmlkbi.feature.device.domain.ObserveMedicalAlarmEventsUseCase
+import ru.aokruan.hmlkbi.feature.device.domain.ObserveMedicalAlarmHistoryUseCase
 import ru.aokruan.hmlkbi.feature.device.domain.ObserveMedicalCurrentStatusUseCase
+import ru.aokruan.hmlkbi.feature.device.domain.ObserveMedicalSessionStateUseCase
 import ru.aokruan.hmlkbi.feature.device.ui.DeviceMonitorViewModel
 import ru.aokruan.hmlkbi.feature.device.ui.DeviceToolsScreen
 import ru.aokruan.notification.android.AndroidNotificationPermissionRequester
@@ -136,7 +139,10 @@ actual fun DeviceToolsRoute(
             connectMedicalDeviceByQrUseCase = ConnectMedicalDeviceByQrUseCase(repository),
             observeMedicalCurrentStatusUseCase = ObserveMedicalCurrentStatusUseCase(repository),
             observeMedicalAlarmEventsUseCase = ObserveMedicalAlarmEventsUseCase(repository),
+            observeMedicalAlarmHistoryUseCase = ObserveMedicalAlarmHistoryUseCase(repository),
+            observeMedicalSessionStateUseCase = ObserveMedicalSessionStateUseCase(repository),
             acknowledgeAlarmUseCase = AcknowledgeAlarmUseCase(repository),
+            disconnectMedicalDeviceUseCase = DisconnectMedicalDeviceUseCase(repository),
         )
     }
 

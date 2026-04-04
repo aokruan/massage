@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -14,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ru.aokruan.hmlkbi.model.BleConnectionState
 
 @Composable
 fun DeviceMonitorScreen(
@@ -25,6 +28,7 @@ fun DeviceMonitorScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -42,10 +46,18 @@ fun DeviceMonitorScreen(
             CircularProgressIndicator()
         }
 
-        Button(
-            onClick = viewModel::onScanQrClicked,
-        ) {
-            Text("Сканировать QR и подключить")
+        if (state.connectionState.canDisconnect()) {
+            Button(
+                onClick = viewModel::onDisconnectClicked,
+            ) {
+                Text("Отключиться")
+            }
+        } else {
+            Button(
+                onClick = viewModel::onScanQrClicked,
+            ) {
+                Text("Сканировать QR и подключить")
+            }
         }
 
         state.currentStatus?.let { status ->
@@ -61,6 +73,24 @@ fun DeviceMonitorScreen(
                     Text("Battery: ${status.batteryPercent ?: "-"}")
                     Text("Critical: ${status.critical}")
                     Text("State: ${status.state}")
+                }
+            }
+        }
+
+        if (state.alarmHistory.isNotEmpty()) {
+            Card {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("История тревог", style = MaterialTheme.typography.titleMedium)
+
+                    state.alarmHistory.take(5).forEach { alarm ->
+                        Text(
+                            "${alarm.severity} • ${alarm.message} • active=${alarm.active}",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
         }
@@ -84,5 +114,16 @@ fun DeviceMonitorScreen(
                 }
             }
         }
+    }
+}
+
+private fun BleConnectionState.canDisconnect(): Boolean {
+    return when (this) {
+        BleConnectionState.Idle,
+        BleConnectionState.CheckingPermissions,
+        is BleConnectionState.Failed,
+        -> false
+
+        else -> true
     }
 }

@@ -2,6 +2,7 @@ package ru.aokruan.hmlkbi.feature.device.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
+import ru.aokruan.hmlkbi.BleSessionState
 import ru.aokruan.hmlkbi.BleConnectParams
 import ru.aokruan.hmlkbi.feature.device.domain.MedicalDeviceRepository
 import ru.aokruan.hmlkbi.model.AlarmEvent
@@ -53,6 +54,14 @@ class MedicalDeviceRepositoryImpl(
             }
     }
 
+    override fun observeAlarmHistory(): Flow<List<AlarmEvent>> {
+        return sessionBridge.observeAlarmHistory()
+    }
+
+    override fun observeSessionState(): Flow<BleSessionState> {
+        return sessionBridge.observeSessionState()
+    }
+
     override suspend fun acknowledgeAlarm(alarmId: Long): Result<Unit> {
         return sessionBridge.acknowledgeAlarm(alarmId)
     }
@@ -67,5 +76,7 @@ interface MedicalDeviceSessionBridge {
     fun stopMonitoring()
     fun observeCurrentStatus(): Flow<MedicalCurrentStatus>
     fun observeAlarmEvents(): Flow<AlarmEvent>
+    fun observeAlarmHistory(): Flow<List<AlarmEvent>>
+    fun observeSessionState(): Flow<BleSessionState>
     suspend fun acknowledgeAlarm(alarmId: Long): Result<Unit>
 }
